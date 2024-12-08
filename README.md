@@ -136,7 +136,7 @@ For certain categorical variables (e.g., `DOMAIN`, `STATE`, `ZIPCODE`), target e
 
 ## Requirements
 ```text
-install.packages(c("shiny", "glmnet", "ggplot2", "dplyr", "pROC", "caret"))
+install.packages(c("shiny", "glmnet", "ggplot2", "dplyr", "pROC", "caret", "rmarkdown"))
 ```
 - Versions used for Project:
     - shiny == 1.9.1
@@ -145,6 +145,7 @@ install.packages(c("shiny", "glmnet", "ggplot2", "dplyr", "pROC", "caret"))
     - dplyr == 1.1.4
     - pROC == 1.18.5
     - caret == 6.0-94
+    - rmarkdown == 2.28
 
 ## References
 1. Burger, S. (2018). *Introduction to Machine Learning with R.* O'Reilly Media.
