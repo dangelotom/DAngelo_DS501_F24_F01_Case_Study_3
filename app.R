@@ -17,6 +17,33 @@ target_encoded_vars <- c("DOMAIN", "STATE", "ZIPCODE")
 exclude_vars <- c(target_variable, "TRN_TYPE")
 feature_vars <- setdiff(names(data), exclude_vars)
 
+# Target encoding function
+target_encode <- function(df_train, df_test, vars_to_encode, target) {
+  df_train_encoded <- df_train
+  df_test_encoded <- df_test
+  
+  for (var in vars_to_encode) {
+    if (!var %in% colnames(df_train_encoded)) {
+      next
+    }
+    encodings <- df_train_encoded %>%
+      group_by_at(var) %>%
+      summarize(Target_Mean = mean(.data[[target]], na.rm = TRUE), .groups = "drop")
+    
+    df_train_encoded <- df_train_encoded %>%
+      left_join(encodings, by = setNames(var, var)) %>%
+      mutate("{var}_encoded" := coalesce(Target_Mean, mean(.data[[target]], na.rm = TRUE))) %>%
+      select(-Target_Mean, -all_of(var))
+    
+    df_test_encoded <- df_test_encoded %>%
+      left_join(encodings, by = setNames(var, var)) %>%
+      mutate("{var}_encoded" := coalesce(Target_Mean, mean(.data[[target]], na.rm = TRUE))) %>%
+      select(-Target_Mean, -all_of(var))
+  }
+  
+  list(train = df_train_encoded, test = df_test_encoded)
+}
+
 # UI
 ui <- fluidPage(
   titlePanel("Logistic Regression Model Builder for Credit Card Fraud Detection Dataset"),
@@ -49,10 +76,13 @@ ui <- fluidPage(
       h4("Source Code for app.R"),
       verbatimTextOutput("appCode")
     ),
-    # EDA Tab (R Markdown)
+    # EDA Tab (HTML)
     tabPanel(
       "EDA",
-      includeMarkdown("case_study_3_eda.Rmd")
+      tags$iframe(src = "case_study_3_eda.html",
+                  width = "100%",
+                  height = "800px",
+                  frameborder = 0)
     )
   )
 )
@@ -60,7 +90,7 @@ ui <- fluidPage(
 # Server
 server <- function(input, output, session) {
   
-  # Splits
+  # Reactive data splitting
   split_data <- reactive({
     req(input$predictors)
     set.seed(input$seed)
@@ -74,7 +104,7 @@ server <- function(input, output, session) {
   encoded_data_reactive <- reactiveValues(train = NULL, test = NULL)
   updated_predictors_reactive <- reactiveVal(NULL)
   
-  # Fit model
+  # Model fitting
   model <- eventReactive(input$run_model, {
     req(input$predictors)
     if (length(input$predictors) < 2) {
@@ -85,36 +115,83 @@ server <- function(input, output, session) {
     train <- split$train
     test <- split$test
     
-    y_train <- factor(train[[target_variable]], levels = c("0", "1"))
+    # Target encode if necessary
+    selected_encoded_vars <- intersect(input$predictors, target_encoded_vars)
+    encoded_data <- if (length(selected_encoded_vars) > 0) {
+      target_encode(train, test, selected_encoded_vars, target_variable)
+    } else {
+      list(train = train, test = test)
+    }
+    train <- encoded_data$train
+    test <- encoded_data$test
+    
+    # Update predictor names for encoded columns
+    updated_predictors <- input$predictors
+    for (var in selected_encoded_vars) {
+      encoded_var <- paste0(var, "_encoded")
+      updated_predictors <- gsub(var, encoded_var, updated_predictors, fixed = TRUE)
+    }
+    
+    # Remove rows with missing values in predictors
+    train <- train[complete.cases(train[, updated_predictors]), ]
+    test <- test[complete.cases(test[, updated_predictors]), ]
+    
+    encoded_data_reactive$train <- train
+    encoded_data_reactive$test <- test
+    updated_predictors_reactive(updated_predictors)
+    
+    y_train <- factor(as.character(train[[target_variable]]), levels = c("0", "1"))
     y_train <- relevel(y_train, ref = "1")
     
-    x_train <- as.matrix(as.data.frame(lapply(train[, input$predictors, drop = FALSE], as.numeric)))
+    # Use model.matrix for safe numeric conversion
+    x_train <- model.matrix(~ . - 1, data = train[, updated_predictors, drop = FALSE])
+    
+    # Compute weights
     weights <- ifelse(y_train == "1", sum(y_train == "0") / sum(y_train == "1"), 1)
     
+    # Fit glmnet
     glmnet(x_train, y_train, family = "binomial", alpha = input$alpha, weights = weights)
   })
   
-  # Outputs
+  # Coefficients
   output$model_coefs <- renderPrint({
     req(model())
     print(coef(model(), s = input$lambda))
   })
   
+  # Metrics (Confusion Matrix, Accuracy, Specificity, etc.)
   output$metrics <- renderPrint({
     req(model())
-    test <- split_data()$test
-    preds <- predict(model(), newx = as.matrix(test[, input$predictors]), s = input$lambda, type = "response")
+    test <- encoded_data_reactive$test
+    updated_predictors <- updated_predictors_reactive()
+    
+    x_test <- model.matrix(~ . - 1, data = test[, updated_predictors, drop = FALSE])
+    preds <- predict(model(), newx = x_test, s = input$lambda, type = "response")
+    preds <- as.numeric(preds)
+    
     pred_classes <- ifelse(preds > input$threshold, 1, 0)
-    confusionMatrix(factor(pred_classes, levels = c(0,1)), factor(test[[target_variable]], levels = c(0,1)))
+    confusion <- confusionMatrix(
+      factor(pred_classes, levels = c(0,1)),
+      factor(test[[target_variable]], levels = c(0,1))
+    )
+    confusion
   })
   
+  # ROC Curve
   output$roc_curve <- renderPlot({
     req(model())
-    test <- split_data()$test
-    preds <- predict(model(), newx = as.matrix(test[, input$predictors]), s = input$lambda, type = "response")
-    plot(roc(test[[target_variable]], preds), main = "ROC Curve")
+    test <- encoded_data_reactive$test
+    updated_predictors <- updated_predictors_reactive()
+    
+    x_test <- model.matrix(~ . - 1, data = test[, updated_predictors, drop = FALSE])
+    preds <- predict(model(), newx = x_test, s = input$lambda, type = "response")
+    preds <- as.numeric(preds)
+    
+    roc_obj <- roc(test[[target_variable]], preds)
+    plot(roc_obj, main = "ROC Curve")
   })
   
+  # Display App Source Code
   output$appCode <- renderText({
     paste(readLines("app.R"), collapse = "\n")
   })
