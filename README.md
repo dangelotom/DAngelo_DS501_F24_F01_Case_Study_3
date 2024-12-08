@@ -130,7 +130,8 @@ For certain categorical variables (e.g., `DOMAIN`, `STATE`, `ZIPCODE`), target e
    git clone https://github.com/dangelotom/DAngelo_DS501_F24_F01_Case_Study_3.git
    ```
 2. Run using ```shiny``` package in R Console:
-   ```shiny::runGitHub("DAngelo_DS501_F24_F01_Case_Study_3", "dangelotom", subdir = "app.R"
+   ```text
+   shiny::runGitHub("DAngelo_DS501_F24_F01_Case_Study_3", "dangelotom", subdir = "app.R"
    ```
 
 ## Requirements
