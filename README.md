@@ -15,6 +15,12 @@
 **App Description**:
 This is a Shiny app that allows users to build and evaluate a logistic regression model on a credit card fraud detection dataset. It leverages the `glmnet` package for regularized logistic regression and includes functionality for target encoding, tuning hyperparameters, adjusting split sizes, and adjusting the prediction threshold.
 
+**Motivation**:
+Credit card fraud is a common issue across the globe. I saw this project as an opportunity to gain some experience not only in building logistic regression models, but also in understanding the challenges in distinguishing legitimate transactions with fraudulent ones. Projects such as this one could be translated into real business value for banks interested in mitigating their losses due to credit card fraud. With additional research, this project could be of interest to law enforcement agencies responsible for identifying and prosecuting cases of credit card fraud.
+
+**Brief Description of Findings**:
+From the EDA and playing around with the app, none of the predictors available are strongly associated/correlated with the target variable. Given the overwhelming class disparity in the target variable (~97% negative cases), it is difficult for the model to capture the patterns in fraud cases. From the overall accuracy (a naive metric in this case), the model performs "well" and can achieve an accuracy on the test set of ~97%. However, further inspection reveals that the false negative rate on the test set approaches 100%, leading to a dismal AUROC score (worse than random). Further research could include data augmentation techniques or random oversampling of the minority class (fraud) so the model has more opportunities to learn the patterns for these observations.
+
 ## Overview of Logistic Regression
 
 **Logistic Regression** is a supervised learning method used for binary classification tasks. In this case, predicting fraudlent vs. legitimate credit card transactions. Instead of directly modeling the outcome (0 or 1), logistic regression models the probability that the outcome is 1 given a set of input features.
